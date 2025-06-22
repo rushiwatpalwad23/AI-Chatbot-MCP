@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Assistant - Ollama + Qwen3</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: #1a202c;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .ai-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .header p {
+            color: #718096;
+            font-size: 16px;
+        }
+
+        .tools-section {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        .tool-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            border-radius: 8px;
+            background: #f7fafc;
+        }
+
+        .tool-icon {
+            width: 24px;
+            height: 24px;
+        }
+
+        .chat-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            height: 600px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            padding: 20px;
+            border-bottom: 1px solid #e2e8f0;
+            border-radius: 12px 12px 0 0;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background: #667eea;
+            color: white;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+            background: #f7fafc;
+            color: #1a202c;
+            border: 1px solid #e2e8f0;
+        }
+
+        .tool-calls {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .tool-call {
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 8px;
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .tool-name {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .tool-params {
+            font-size: 12px;
+            color: #718096;
+            margin-top: 4px;
+        }
+
+        .chat-input {
+            padding: 20px;
+            border-top: 1px solid #e2e8f0;
+            border-radius: 0 0 12px 12px;
+        }
+
+        .input-form {
+            display: flex;
+            gap: 12px;
+        }
+
+        .input-field {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #e2e8f0;
+            border-radius: 24px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .input-field:focus {
+            border-color: #667eea;
+        }
+
+        .send-button {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 24px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .send-button:hover:not(:disabled) {
+            background: #5a67d8;
+        }
+
+        .send-button:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #718096;
+            font-style: italic;
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #e2e8f0;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-online {
+            background: #48bb78;
+        }
+
+        .status-offline {
+            background: #f56565;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #718096;
+            padding: 40px 20px;
+        }
+
+        .example-queries {
+            margin-top: 20px;
+        }
+
+        .example-query {
+            display: inline-block;
+            background: #edf2f7;
+            color: #4a5568;
+            padding: 8px 12px;
+            border-radius: 16px;
+            margin: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        .example-query:hover {
+            background: #e2e8f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>
+                <div class="ai-icon">AI</div>
+                AI Assistant with Ollama + Qwen3
+            </h1>
+            <p>Ask me anything! I can use tools like calculator and weather when needed.</p>
+        </div>
+
+        <!-- Tools Section -->
+        <div class="tools-section">
+            <h3>Available Tools</h3>
+            <div class="tools-grid">
+                <div class="tool-card">
+                    <svg class="tool-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                    </svg>
+                    <div>
+                        <div style="font-weight: 600;">Calculator</div>
+                        <div style="font-size: 14px; color: #718096;">Basic math operations</div>
+                    </div>
+                </div>
+                <div class="tool-card">
+                    <svg class="tool-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path>
+                    </svg>
+                    <div>
+                        <div style="font-weight: 600;">Weather</div>
+                        <div style="font-size: 14px; color: #718096;">Get temperature info</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Container -->
+        <div class="chat-container">
+            <div class="chat-header">
+                <h3>
+                    <span class="status-indicator status-offline" id="statusIndicator"></span>
+                    Conversation
+                </h3>
+            </div>
+            
+            <div class="chat-messages" id="chatMessages">
+                <div class="empty-state">
+                    <h4>Start a conversation!</h4>
+                    <p>Try asking me something below. Here are some examples:</p>
+                    <div class="example-queries">
+                        <span class="example-query" onclick="sendExample('What is 25 + 17?')">What is 25 + 17?</span>
+                        <span class="example-query" onclick="sendExample('Tell me the temperature in Pune')">Temperature in Pune</span>
+                        <span class="example-query" onclick="sendExample('Calculate 100 divided by 4')">100 ÷ 4</span>
+                        <span class="example-query" onclick="sendExample('Hello there!')">Hello there!</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chat-input">
+                <form class="input-form" id="chatForm">
+                    <input 
+                        type="text" 
+                        class="input-field" 
+                        id="messageInput" 
+                        placeholder="Ask me anything... (e.g., 'What's 25 + 17?' or 'Temperature in London?')"
+                        autocomplete="off"
+                    >
+                    <button type="submit" class="send-button" id="sendButton">Send</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatMessages = document.getElementById('chatMessages');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const chatForm = document.getElementById('chatForm');
+        const statusIndicator = document.getElementById('statusIndicator');
+
+        let isLoading = false;
+
+        // Check system status
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/status');
+                if (response.ok) {
+                    statusIndicator.className = 'status-indicator status-online';
+                } else {
+                    statusIndicator.className = 'status-indicator status-offline';
+                }
+            } catch (error) {
+                statusIndicator.className = 'status-indicator status-offline';
+            }
+        }
+
+        // Add message to chat
+        function addMessage(content, isUser = false, toolCalls = []) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
+            
+            let messageHTML = `<div>${content}</div>`;
+            
+            if (toolCalls && toolCalls.length > 0) {
+                messageHTML += '<div class="tool-calls">';
+                messageHTML += '<div style="font-size: 14px; font-weight: 600; margin-bottom: 8px;">Tools Used:</div>';
+                toolCalls.forEach(tool => {
+                    messageHTML += `
+                        <div class="tool-call">
+                            <div class="tool-name">${tool.name}</div>
+                            <div class="tool-params">Parameters: ${JSON.stringify(tool.parameters)}</div>
+                            ${tool.result ? `<div class="tool-params">Result: ${tool.result}</div>` : ''}
+                        </div>
+                    `;
+                });
+                messageHTML += '</div>';
+            }
+            
+            messageDiv.innerHTML = messageHTML;
+            
+            // Remove empty state if it exists
+            const emptyState = chatMessages.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+            
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Add loading indicator
+        function addLoadingMessage() {
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'message assistant loading';
+            loadingDiv.id = 'loadingMessage';
+            loadingDiv.innerHTML = '<div class="spinner"></div> Thinking...';
+            
+            const emptyState = chatMessages.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+            
+            chatMessages.appendChild(loadingDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Remove loading indicator
+        function removeLoadingMessage() {
+            const loadingMessage = document.getElementById('loadingMessage');
+            if (loadingMessage) {
+                loadingMessage.remove();
+            }
+        }
+
+        // Send message
+        async function sendMessage(message) {
+            if (!message.trim() || isLoading) return;
+
+            isLoading = true;
+            sendButton.disabled = true;
+            sendButton.textContent = 'Sending...';
+
+            // Add user message
+            addMessage(message, true);
+
+            // Add loading indicator
+            addLoadingMessage();
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: message }),
+                });
+
+                const data = await response.json();
+
+                // Remove loading indicator
+                removeLoadingMessage();
+
+                if (response.ok) {
+                    addMessage(data.content, false, data.toolCalls || []);
+                } else {
+                    addMessage(`Error: ${data.error || 'Something went wrong'}`, false);
+                }
+            } catch (error) {
+                removeLoadingMessage();
+                addMessage(`Error: Failed to connect to server. Make sure the MCP server is running.`, false);
+            }
+
+            isLoading = false;
+            sendButton.disabled = false;
+            sendButton.textContent = 'Send';
+            messageInput.value = '';
+        }
+
+        // Send example query
+        function sendExample(query) {
+            messageInput.value = query;
+            sendMessage(query);
+        }
+
+        // Form submit handler
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            sendMessage(messageInput.value);
+        });
+
+        // Enter key handler
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage(messageInput.value);
+            }
+        });
+
+        // Check status on load
+        checkStatus();
+        setInterval(checkStatus, 30000); // Check every 30 seconds
+    </script>
+</body>
+</html>

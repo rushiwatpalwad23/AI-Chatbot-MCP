@@ -1,0 +1,1008 @@
+I'll create a comprehensive documentation explaining your entire AI Tool Calling project. This will be a detailed guide covering everything from concepts to implementation.
+
+`<CodeProject id="ai-tool-calling-app">````markdown file="PROJECT_DOCUMENTATION.md"
+...
+```
+
+- Verifies Ollama is installed and running
+- Ensures we can communicate with Ollama service
+
+
+#### Step 2: Install Python Dependencies
+
+```python
+requirements = [
+    "fastapi>=0.104.0",    # For MCP server
+    "uvicorn>=0.24.0",     # ASGI server for FastAPI
+    "pydantic>=2.5.0",     # Data validation
+    "requests>=2.31.0",    # HTTP requests for MCP client
+    "ollama>=0.1.7",       # Ollama Python client
+    "flask>=2.3.0"         # Web interface
+]
+```
+
+#### Step 3: Download Base Model
+
+```bash
+ollama pull qwen3:8b  # Downloads ~4GB model from internet
+
+```plaintext
+- Downloads the base Qwen2.5 model (you changed this to qwen3)
+- Stores locally for offline use
+
+#### Step 4: Create Custom Model
+\`\`\`bash
+ollama create ai_app_model -f config/modelfile
+```
+
+- Creates a customized version with specific instructions
+- Adds system prompt for tool calling behavior
+
+
+### 4.2 The Modelfile Explained
+
+```dockerfile
+FROM qwen2.5:7b                    # Base model
+PARAMETER temperature 0.1          # Low randomness for consistent responses
+PARAMETER top_p 0.9               # Nucleus sampling
+PARAMETER top_k 40                # Top-k sampling
+PARAMETER num_ctx 4096            # Context window size
+PARAMETER num_predict 512         # Max tokens to generate
+
+SYSTEM """                        # System instructions
+You are a helpful AI assistant powered by Qwen3 that can use external tools when needed.
+
+TOOL USAGE RULES:
+
+- For math calculations, use the "calculator" tool
+- For weather/temperature queries, use the "get_temperature" tool
+- For general conversation, respond directly without tools
+
+
+RESPONSE FORMAT:
+When you need a tool, respond with ONLY this JSON:
+{"tool_name": "tool_name", "parameters": {"param": "value"}}
+
+When no tool is needed, respond with: NO_TOOL_NEEDED
+"""
+
+```plaintext
+
+**Why This Works:**
+- The system prompt teaches the AI when and how to use tools
+- Low temperature ensures consistent JSON formatting
+- Specific examples help the AI understand the format
+
+---
+
+## 5. File Structure & Purpose
+
+```
+
+ai_app/
+├── app.py                    # Command-line interface (original)
+├── web_app.py               # Web interface backend
+├── setup.py                 # One-time setup script
+├── start_web_app.py         # Convenience starter script
+├── requirements.txt         # Python dependencies
+├── PROJECT_DOCUMENTATION.md # This file
+│
+├── config/
+│   ├── config.json         # Application configuration
+│   └── modelfile           # Ollama model configuration
+│
+├── mcp_client/
+│   ├── **init**.py         # Package marker
+│   └── client.py           # MCP client implementation
+│
+├── mcp_server/
+│   ├── **init**.py         # Package marker
+│   ├── server.py           # MCP server (FastAPI)
+│   └── tools.py            # Tool implementations
+│
+└── templates/
+└── index.html          # Web interface frontend
+
+```plaintext
+
+### 5.1 Core Files Explained
+
+#### `config/config.json`
+\`\`\`json
+{
+  "ollama": {
+    "host": "http://localhost:11434",  # Ollama server address
+    "model": "ai_app_model",           # Our custom model name
+    "temperature": 0.1,                # Response randomness
+    "top_p": 0.9,                      # Sampling parameters
+    "top_k": 40,
+    "num_ctx": 4096,                   # Context window
+    "num_predict": 512                 # Max response length
+  },
+  "mcp_server": {
+    "host": "http://localhost:8000"    # MCP server address
+  }
+}
+```
+
+#### `mcp_client/client.py`
+
+**Purpose**: Communicates with MCP server to execute tools
+
+```python
+class MCPClient:
+    def get_tools(self):
+        # Fetches list of available tools from MCP server
+        response = requests.get(f"{self.server_url}/mcp/tools")
+        return response.json()
+    
+    def execute_tool(self, tool_name, parameters):
+        # Executes a specific tool with given parameters
+        response = requests.post(f"{self.server_url}/mcp/execute", 
+                               json={"tool_name": tool_name, "parameters": parameters})
+        return response.json().get("result")
+```
+
+#### `mcp_server/server.py`
+
+**Purpose**: FastAPI server that hosts tools and handles execution
+
+```python
+@app.get("/mcp/tools")
+async def get_tools():
+    # Returns list of available tools for discovery
+    return [tool_descriptions...]
+
+@app.post("/mcp/execute")
+async def execute_tool(request: ToolCallRequest):
+    # Executes the requested tool
+    tool = tools.get(request.tool_name)
+    result = tool.execute(request.parameters)
+    return {"result": result}
+```
+
+#### `mcp_server/tools.py`
+
+**Purpose**: Contains actual tool implementations
+
+```python
+class CalculatorTool:
+    def execute(self, params):
+        operation = params.get("operation")
+        a = float(params.get("a"))
+        b = float(params.get("b"))
+        # Perform calculation and return result
+        
+class TemperatureTool:
+    def execute(self, params):
+        place_name = params.get("place_name")
+        # Get temperature data and return result
+```
+
+#### `web_app.py`
+
+**Purpose**: Flask web server that provides the chat interface
+
+```python
+@app.route('/')
+def index():
+    # Serves the HTML chat interface
+    return render_template('index.html')
+
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    # Handles chat messages from frontend
+    # 1. Get user message
+    # 2. Ask Qwen3 for tool decision
+    # 3. Execute tools if needed
+    # 4. Generate final response
+    # 5. Return to frontend
+```
+
+#### `templates/index.html`
+
+**Purpose**: Frontend chat interface (HTML + CSS + JavaScript)
+
+- **HTML**: Structure of the chat interface
+- **CSS**: Styling and layout
+- **JavaScript**: Handles user interactions and API calls
+
+
+---
+
+## 6. Code Flow & Execution
+
+### 6.1 Startup Sequence
+
+#### Terminal 1: Ollama
+
+```bash
+ollama serve
+
+```plaintext
+- Starts Ollama service on port 11434
+- Loads and manages AI models
+- Provides API for model inference
+
+#### Terminal 2: MCP Server
+\`\`\`bash
+python mcp_server/server.py
+```
+
+1. Imports tool classes from `tools.py`
+2. Creates FastAPI application
+3. Registers tool endpoints (`/mcp/tools`, `/mcp/execute`)
+4. Starts server on port 8000
+
+
+#### Terminal 3: Web Application
+
+```bash
+python web_app.py
+
+```plaintext
+1. Loads configuration from `config/config.json`
+2. Initializes MCP client (connects to port 8000)
+3. Initializes Ollama client (connects to port 11434)
+4. Tests connections
+5. Starts Flask server on port 5000
+
+### 6.2 Request Processing Flow
+
+#### Step 1: User Input
+\`\`\`javascript
+// In index.html
+fetch('/api/chat', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ message: userMessage })
+})
+```
+
+#### Step 2: Backend Processing
+
+```python
+# In web_app.py
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    user_message = request.json.get('message')
+    
+    # Create decision prompt
+    decision_prompt = f"""
+    Available tools: {tool_descriptions}
+    User query: {user_message}
+    
+    If tool needed, respond with JSON:
+    {{"tool_name": "name", "parameters": {{"param": "value"}}}}
+    
+    If no tool needed, respond with: NO_TOOL_NEEDED
+    """
+```
+
+#### Step 3: AI Decision
+
+```python
+# Ask Qwen3 to decide
+decision_response = ollama_client.chat(
+    model="ai_app_model",
+    messages=[{"role": "user", "content": decision_prompt}]
+)
+```
+
+#### Step 4: Tool Execution (if needed)
+
+```python
+if tool_call_detected:
+    # Execute tool via MCP
+    tool_result = mcp_client.execute_tool(
+        tool_call["tool_name"], 
+        tool_call["parameters"]
+    )
+    
+    # Generate final answer using tool result
+    final_prompt = f"""
+    User asked: {user_message}
+    Tool result: {tool_result}
+    Provide final answer using this result.
+    """
+    
+    final_response = ollama_client.chat(...)
+```
+
+#### Step 5: Response to Frontend
+
+```python
+return jsonify({
+    'content': final_response['message']['content'],
+    'toolCalls': [tool_call_info]
+})
+```
+
+#### Step 6: Frontend Display
+
+```javascript
+// Display response in chat interface
+addMessage(data.content, false, data.toolCalls);
+
+```plaintext
+
+---
+
+## 7. Frontend-Backend Connection
+
+### 7.1 Communication Protocol
+The frontend and backend communicate via HTTP REST API:
+
+```
+
+Frontend (JavaScript) ←→ HTTP POST/GET ←→ Backend (Flask)
+
+```plaintext
+
+### 7.2 API Endpoints
+
+#### `/` (GET)
+- **Purpose**: Serves the main chat interface
+- **Returns**: HTML page with chat UI
+
+#### `/api/chat` (POST)
+- **Purpose**: Processes chat messages
+- **Input**: `{"message": "user question"}`
+- **Output**: `{"content": "ai response", "toolCalls": [...]}`
+
+#### `/api/status` (GET)
+- **Purpose**: Checks system health
+- **Returns**: Status of Ollama, MCP server, and available tools
+
+### 7.3 Frontend JavaScript Functions
+
+#### Message Sending
+\`\`\`javascript
+async function sendMessage(message) {
+    // 1. Add user message to chat
+    addMessage(message, true);
+    
+    // 2. Show loading indicator
+    addLoadingMessage();
+    
+    // 3. Send to backend
+    const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ message: message })
+    });
+    
+    // 4. Process response
+    const data = await response.json();
+    
+    // 5. Display AI response
+    removeLoadingMessage();
+    addMessage(data.content, false, data.toolCalls);
+}
+```
+
+#### Status Checking
+
+```javascript
+async function checkStatus() {
+try {
+const response = await fetch('/api/status');
+if (response.ok) {
+statusIndicator.className = 'status-indicator status-online';
+} else {
+statusIndicator.className = 'status-indicator status-offline';
+}
+} catch (error) {
+statusIndicator.className = 'status-indicator status-offline';
+}
+}
+
+```plaintext
+
+---
+
+## 8. Tool System
+
+### 8.1 How Tools Work
+
+#### Tool Discovery
+1. MCP Server exposes `/mcp/tools` endpoint
+2. Returns list of available tools with descriptions
+3. AI model receives this information in prompts
+
+#### Tool Execution
+1. AI decides a tool is needed
+2. Outputs JSON with tool name and parameters
+3. MCP Client sends execution request to MCP Server
+4. MCP Server routes to appropriate tool class
+5. Tool executes and returns result
+6. Result flows back to AI for final response
+
+### 8.2 Tool Structure
+
+#### Base Tool Pattern
+```python
+class ToolName:
+    def execute(self, params: Dict[str, Any]) -> str:
+        try:
+            # 1. Extract parameters
+            param1 = params.get("param1")
+            param2 = params.get("param2")
+            
+            # 2. Validate inputs
+            if not param1:
+                return "Error: Missing required parameter"
+            
+            # 3. Perform operation
+            result = do_something(param1, param2)
+            
+            # 4. Return formatted result
+            return f"Result: {result}"
+            
+        except Exception as e:
+            return f"Error: {str(e)}"
+```
+
+#### Tool Registration
+
+```python
+# In mcp_server/server.py
+tools = {
+    "calculator": CalculatorTool(),
+    "get_temperature": TemperatureTool(),
+    # Add new tools here
+}
+```
+
+### 8.3 Current Tools Explained
+
+#### Calculator Tool
+
+```python
+class CalculatorTool:
+    def execute(self, params):
+        operation = params.get("operation")  # "add", "subtract", etc.
+        a = float(params.get("a"))           # First number
+        b = float(params.get("b"))           # Second number
+        
+        if operation == "add":
+            result = a + b
+            return f"The result of {a} + {b} = {result}"
+        # ... other operations
+```
+
+**Usage**: `{"tool_name": "calculator", "parameters": {"operation": "add", "a": 5, "b": 3}}`
+
+#### Temperature Tool
+
+```python
+class TemperatureTool:
+    def execute(self, params):
+        place_name = params.get("place_name")  # City name
+        
+        # Look up temperature (simulated data)
+        base_temp = base_temperatures.get(place_name.lower(), 25)
+        actual_temp = base_temp + random.randint(-3, 3)  # Add variation
+        
+        return f"Current temperature in {place_name}: {actual_temp}°C"
+```
+
+**Usage**: `{"tool_name": "get_temperature", "parameters": {"place_name": "Mumbai"}}`
+
+---
+
+## 9. Customization Guide
+
+### 9.1 Adding New Tools
+
+#### Step 1: Create Tool Class
+
+```python
+# In mcp_server/tools.py
+class WebSearchTool:
+    def execute(self, params: Dict[str, Any]) -> str:
+        try:
+            query = params.get("query")
+            if not query:
+                return "Error: No search query provided"
+            
+            # Implement web search logic here
+            # For example, using requests to search
+            results = perform_web_search(query)
+            
+            return f"Search results for '{query}': {results}"
+            
+        except Exception as e:
+            return f"Error performing web search: {str(e)}"
+```
+
+#### Step 2: Register Tool
+
+```python
+# In mcp_server/server.py
+tools = {
+    "calculator": CalculatorTool(),
+    "get_temperature": TemperatureTool(),
+    "web_search": WebSearchTool(),  # Add new tool
+}
+```
+
+#### Step 3: Add Tool Description
+
+```python
+# In mcp_server/server.py
+@app.get("/mcp/tools")
+async def get_tools():
+    return [
+        # ... existing tools ...
+        {
+            "name": "web_search",
+            "description": "Searches the web for information",
+            "parameters": [
+                {"name": "query", "type": "string", "description": "Search query", "required": True}
+            ]
+        }
+    ]
+```
+
+#### Step 4: Update AI Instructions
+
+```dockerfile
+
+# In config/modelfile
+
+SYSTEM """
+...
+
+- For web searches, use the "web_search" tool
+...
+- "Search for Python tutorials" → {"tool_name": "web_search", "parameters": {"query": "Python tutorials"}}
+"""
+
+
+```plaintext
+
+#### Step 5: Restart Services
+\`\`\`bash
+# Recreate model with new instructions
+ollama create ai_app_model -f config/modelfile
+
+# Restart MCP server
+python mcp_server/server.py
+```
+
+### 9.2 Modifying Existing Tools
+
+#### Example: Adding More Weather Details
+
+```python
+class TemperatureTool:
+    def execute(self, params: Dict[str, Any]) -> str:
+        place_name = params.get("place_name")
+        
+        # Enhanced weather data
+        weather_data = {
+            "temperature": base_temp + random.randint(-3, 3),
+            "humidity": random.randint(40, 80),
+            "wind_speed": random.randint(5, 25),
+            "condition": random.choice(weather_conditions)
+        }
+        
+        return f"""Weather in {place_name}:
+        Temperature: {weather_data['temperature']}°C
+        Humidity: {weather_data['humidity']}%
+        Wind Speed: {weather_data['wind_speed']} km/h
+        Condition: {weather_data['condition']}"""
+```
+
+### 9.3 Changing AI Models
+
+#### Using Different Ollama Models
+
+```bash
+
+# Pull different model
+
+ollama pull llama2:7b
+
+# Update modelfile
+
+FROM llama2:7b
+
+# ... rest of configuration
+
+# Create new custom model
+
+ollama create ai_app_model -f config/modelfile
+
+```plaintext
+
+#### Adjusting Model Parameters
+\`\`\`json
+// In config/config.json
+{
+  "ollama": {
+    "model": "ai_app_model",
+    "temperature": 0.3,     // Higher = more creative
+    "top_p": 0.8,          // Nucleus sampling
+    "num_ctx": 8192,       // Larger context window
+    "num_predict": 1024    // Longer responses
+  }
+}
+```
+
+### 9.4 Customizing Frontend
+
+#### Changing Colors/Styling
+
+```css
+/* In templates/index.html */
+:root {
+--primary-color: #your-color;
+--secondary-color: #your-color;
+--background-gradient: linear-gradient(135deg, #color1, #color2);
+}
+
+```plaintext
+
+#### Adding New Features
+\`\`\`javascript
+// Example: Add conversation export
+function exportConversation() {
+    const messages = document.querySelectorAll('.message');
+    const conversation = Array.from(messages).map(msg => msg.textContent);
+    const blob = new Blob([conversation.join('\n\n')], {type: 'text/plain'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'conversation.txt';
+    a.click();
+}
+```
+
+### 9.5 Adding Authentication
+
+#### Simple Password Protection
+
+```python
+# In web_app.py
+from flask import session, redirect, url_for
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        password = request.form['password']
+        if password == 'your_password':
+            session['authenticated'] = True
+            return redirect(url_for('index'))
+    return render_template('login.html')
+
+@app.before_request
+def require_auth():
+    if request.endpoint != 'login' and not session.get('authenticated'):
+        return redirect(url_for('login'))
+```
+
+---
+
+## 10. Troubleshooting
+
+### 10.1 Common Issues
+
+#### "Ollama not running"
+
+```bash
+
+# Check if Ollama is installed
+
+ollama --version
+
+# Start Ollama service
+
+ollama serve
+
+# Check if models are available
+
+ollama list
+
+```plaintext
+
+#### "MCP Server connection failed"
+\`\`\`bash
+# Check if MCP server is running
+curl http://localhost:8000/health
+
+# Check for port conflicts
+netstat -an | grep 8000
+
+# Restart MCP server
+python mcp_server/server.py
+```
+
+#### "Model not found"
+
+```bash
+
+# List available models
+
+ollama list
+
+# Recreate custom model
+
+ollama create ai_app_model -f config/modelfile
+
+# Test model
+
+ollama run ai_app_model "Hello"
+
+```plaintext
+
+#### "Tool execution failed"
+- Check tool implementation for errors
+- Verify parameter names match expectations
+- Add logging to tool methods for debugging
+
+### 10.2 Performance Optimization
+
+#### Model Performance
+\`\`\`json
+// Faster inference
+{
+  "ollama": {
+    "num_ctx": 2048,      // Smaller context
+    "num_predict": 256,   // Shorter responses
+    "temperature": 0.1    // More deterministic
+  }
+}
+```
+
+#### Server Performance
+
+```python
+# In web_app.py
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000  # Cache static files
+app.config['JSON_SORT_KEYS'] = False               # Faster JSON
+```
+
+### 10.3 Debugging Tips
+
+#### Enable Detailed Logging
+
+```python
+# In web_app.py
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+# In mcp_server/server.py
+import uvicorn
+uvicorn.run(app, host="0.0.0.0", port=8000, log_level="debug")
+```
+
+#### Monitor Resource Usage
+
+```bash
+
+# Check CPU/Memory usage
+
+htop
+
+# Monitor Ollama
+
+ollama ps
+
+# Check disk space (models are large)
+
+df -h
+
+```plaintext
+
+---
+
+## Conclusion
+
+This AI Tool Calling application demonstrates a complete local AI system with:
+
+- **Local AI Model**: Ollama + Qwen3 for privacy and control
+- **Standardized Tool Interface**: MCP for easy tool integration
+- **Modern Web Interface**: Flask + HTML/CSS/JS for user interaction
+- **Modular Architecture**: Easy to extend and customize
+
+The system is designed to be:
+- **Extensible**: Easy to add new tools and features
+- **Maintainable**: Clear separation of concerns
+- **Scalable**: Can handle multiple users and tools
+- **Private**: Everything runs locally
+
+You now have a solid foundation to build upon, whether you want to add more sophisticated tools, integrate with external APIs, or create a more advanced user interface.
+```
+
+```markdown
+# Quick Reference Guide
+
+## Essential Commands
+
+### Start the Application
+\`\`\`bash
+# Terminal 1: Ollama
+ollama serve
+
+# Terminal 2: MCP Server
+python mcp_server/server.py
+
+# Terminal 3: Web App
+python web_app.py
+
+# Or use the all-in-one starter:
+python start_web_app.py
+\`\`\`
+
+### Access Points
+- **Web Interface**: http://localhost:5000
+- **MCP Server**: http://localhost:8000
+- **MCP API Docs**: http://localhost:8000/docs
+- **Ollama**: http://localhost:11434
+
+## File Quick Reference
+
+### Configuration
+- `config/config.json` - App settings
+- `config/modelfile` - AI model configuration
+
+### Backend
+- `web_app.py` - Main web server
+- `mcp_server/server.py` - Tool server
+- `mcp_server/tools.py` - Tool implementations
+- `mcp_client/client.py` - Tool client
+
+### Frontend
+- `templates/index.html` - Web interface
+
+### Utilities
+- `setup.py` - Initial setup
+- `start_web_app.py` - Easy starter
+
+## Adding a New Tool (Quick Steps)
+
+1. **Add tool class** in `mcp_server/tools.py`:
+```python
+class MyTool:
+    def execute(self, params):
+        return "Tool result"
+```
+
+2. **Register tool** in `mcp_server/server.py`:
+
+
+```python
+tools = {
+    "my_tool": MyTool(),
+    # ... existing tools
+}
+```
+
+3. **Add description** in `get_tools()` function
+4. **Update modelfile** with new tool instructions
+5. **Restart services**
+
+
+## Common Customizations
+
+### Change AI Model
+
+```bash
+ollama pull different-model:7b
+
+# Update config/modelfile FROM line
+
+ollama create ai_app_model -f config/modelfile
+
+```plaintext
+
+### Modify Tool Behavior
+Edit `mcp_server/tools.py` and restart MCP server
+
+### Update UI
+Edit `templates/index.html` and restart web app
+
+### Change Ports
+Update `config/config.json` and restart services
+
+## Troubleshooting Quick Fixes
+
+### Ollama Issues
+\`\`\`bash
+ollama serve          # Start service
+ollama list          # Check models
+ollama pull qwen2.5:7b  # Download model
+```
+
+### Connection Issues
+
+```bash
+curl [http://localhost:8000/health](http://localhost:8000/health)  # Test MCP server
+curl [http://localhost:5000](http://localhost:5000)         # Test web server
+
+```plaintext
+
+### Reset Everything
+\`\`\`bash
+# Stop all services (Ctrl+C)
+# Restart in order: Ollama → MCP Server → Web App
+```
+
+```plaintext
+
+
+
+</CodeProject>
+
+I've created comprehensive documentation that covers everything about your AI Tool Calling project! Here's what I've included:
+
+## 📚 **Complete Documentation Structure:**
+
+### **1. PROJECT_DOCUMENTATION.md** - Main comprehensive guide covering:
+- **Project Overview** - What it does and key features
+- **Core Concepts** - Ollama, Qwen3, MCP explained
+- **Architecture** - How everything connects
+- **Setup Process** - What happens during `python setup.py`
+- **File Structure** - Purpose of every file
+- **Code Flow** - Step-by-step execution
+- **Frontend-Backend Connection** - How web UI communicates
+- **Tool System** - How tools work and are discovered
+- **Customization Guide** - How to modify everything
+- **Troubleshooting** - Common issues and solutions
+
+### **2. QUICK_REFERENCE.md** - Handy reference for:
+- Essential commands
+- File locations
+- Quick customization steps
+- Common troubleshooting
+
+## 🎯 **Key Explanations Covered:**
+
+### **Setup Process (`python setup.py`)**
+- Downloads Qwen2.5 model (which you changed to qwen3)
+- Creates custom model with tool-calling instructions
+- Installs Python dependencies
+- Sets up project structure
+
+### **MCP Architecture**
+- **MCP Server**: Hosts tools, handles execution
+- **MCP Client**: Communicates with server
+- **Tool Discovery**: AI learns about available tools
+- **Tool Execution**: Standardized way to run tools
+
+### **Code Flow**
+1. User types in web interface
+2. Flask backend receives message
+3. Qwen3 decides if tools needed
+4. MCP Client executes tools if needed
+5. Qwen3 generates final answer
+6. Response displayed in web interface
+
+### **Tool System**
+- How tools are registered and discovered
+- How to add new tools (step-by-step)
+- How to modify existing tools
+- Parameter handling and error management
+
+### **Customization Examples**
+- Adding new tools (web search, file operations)
+- Changing AI models
+- Modifying frontend appearance
+- Adding authentication
+- Performance optimization
+
+This documentation will help you understand every aspect of the project and guide you through any modifications you want to make in the future! 🚀
+
+<Actions>
+  <Action name="Add more tools" description="Create additional tools like file operations, web search, or database queries" />
+  <Action name="Enhance frontend" description="Add features like conversation history, export, or user settings" />
+  <Action name="Add authentication" description="Implement user login and session management" />
+  <Action name="Deploy to cloud" description="Set up the application for cloud deployment" />
+  <Action name="Create API documentation" description="Generate detailed API docs for the MCP server" />
+</Actions>
+
+
+
+```

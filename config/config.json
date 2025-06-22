@@ -1,0 +1,14 @@
+{
+  "ollama": {
+    "host": "http://localhost:11434",
+    "model": "ai_app_model",
+    "temperature": 0.1,
+    "top_p": 0.9,
+    "top_k": 40,
+    "num_ctx": 6144,
+    "num_predict": 768
+  },
+  "mcp_server": {
+    "host": "http://localhost:8000"
+  }
+}
